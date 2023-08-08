@@ -83,12 +83,12 @@ void Bucket <K,V>::insert (const T& pair)
 
   while (bucket[hash].key != K{})
   {
-    hash = (hash + 1 ) % table.size();
+    hash = (hash + 1 ) % bucket.size();
 
     //if full
     if (hash == start_index)
     {
-      rehash (table.size() * 2);
+      rehash (bucket.size() * 2);
       hash = concurrency_utils::KeyUtils <K>::atomic_hash (pair.key, bucket.size ());
     }
   }
