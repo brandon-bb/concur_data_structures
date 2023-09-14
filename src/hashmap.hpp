@@ -30,25 +30,19 @@ template <typename K, typename V>
 class Bucket
 {
 private:
-  struct KV_Pair
-  {
-    K key;
-    V value;
-  };
-
   size_t bucket_size = 0;
   const size_t default_bucket_size = 128;
   const double max_fill_ratio = 0.75;
   const double min_fill_ratio = 0.3;
 
-  std::vector <T> bucket;
-  std::mutex insert_mutex;
-  std::mutex remove_mutex;
-  std::mutex retrieve_mutex;
+  std::vector <KV_Pair> bucket;
 
   double check_load_factor ();
   void rehash (size_t new_size);
   size_t generate_hash (const K& key, size_t bucket_size); //return concurrency_utils::atomic_hash
+  static std::size_t get_precomputed_hash (const K& key);
+
+
 
 
 public:
@@ -66,19 +60,20 @@ public:
   const KV_Pair& retrieve_pair (const K& key);
 };
 
-
+/*
+BUCKET IMPLEMENTATION
+*/
 template <typename K, typename V>
 Bucket <K,V>::Bucket () : bucket (default_bucket_size) {}
-
 
 
 template <typename K, typename V>
 template <typename T>
 void Bucket <K,V>::insert (const T& pair)
 {
-  if (check_load_factor() > max_fill_ratio) { rehash (bucket.size() * 2); }
+  if (check_load_factor() >= max_fill_ratio) { rehash (bucket.size() * 2); }
 
-  std::size_t hash = concurrency_utils::KeyUtils <K>::atomic_hash (pair.key, bucket.size ());
+  std::size_t hash = concurrency_utils::KeyUtils <K>::generic_hash (pair.key, bucket.size ());
   std::size_t initial_index = hash;
 
   while (bucket[hash].key != K{})
@@ -86,16 +81,16 @@ void Bucket <K,V>::insert (const T& pair)
     hash = (hash + 1 ) % bucket.size();
 
     //if full
-    if (hash == start_index)
+    if (hash == initial_index)
     {
       rehash (bucket.size() * 2);
-      hash = concurrency_utils::KeyUtils <K>::atomic_hash (pair.key, bucket.size ());
+      hash = concurrency_utils::KeyUtils <K>::generic_hash (pair.key, bucket.size ());
     }
   }
 
   bucket[hash].key = pair.key;
   bucket[hash].value = pair.value;
-  bucket_size++:
+  bucket_size++;
 }
 
 template <typename K, typename V>
@@ -103,9 +98,7 @@ void Bucket <K,V>::remove (const K& key)
 {
   if (check_load_factor() > min_fill_ratio) { rehash (bucket.size() / 2); }
 
-  std::size_t index = concurrency_utils::KeyUtils <K>::atomic_hash (key, bucket.size ());
-  
-  std::lock_guard <std::mutex> lock (remove_mutex);
+  std::size_t index = concurrency_utils::KeyUtils <K>::generic_hash (key, bucket.size ());
 
   while (bucket[index] != K{})
   {
@@ -118,5 +111,31 @@ void Bucket <K,V>::remove (const K& key)
     index = (index + 1) % bucket.size();
   }
 }
+
+template <typename K, typename V>
+bool Bucket <K,V>::find (const K& key)
+{
+  if (!bucket.empty())
+  {
+    std::size_t index = concurrency_utils::KeyUtils <K>::generic_hash (key, bucket.size());
+  }
+}
+
+
+template <typename K, typename V>
+class Concurrent_HashMap 
+{
+private:
+  std::vector <Bucket <K,V>> buckets;
+  std::vector <std::mutex> bucket_mutexes;
+};
+
+/*
+insert function example
+- calculate bucket index
+lock specific bucket - std::unique_lock<std::mutex> lock (bucket_mutexes[bucket_index]);
+insert pair.
+*/
+
 
 }
